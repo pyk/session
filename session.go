@@ -48,10 +48,12 @@ func (rp *Reply) TransmitWithErr(str string, err error) error {
 // command represents a SMTP Commands
 type command string
 
+// String return a command as string
 func (c command) String() string {
 	return string(c)
 }
 
+// Valid check validality of command
 func (c command) Valid() (bool, error) {
 	// empty lines
 	if c.String() == "" {
@@ -65,6 +67,8 @@ func (c command) Valid() (bool, error) {
 
 	return true, nil
 }
+
+// Verb extract a command verb from line
 func (c command) Verb() string {
 	if c.String() == "\r\n" {
 		return "\r\n"
@@ -83,7 +87,7 @@ func (c command) Verb() string {
 			return strings.ToUpper(s[0])
 		}
 	}
-	return "NOT YET"
+	return ""
 }
 
 func (c command) Arg() string {
@@ -128,10 +132,13 @@ func (s *Session) Close() error {
 	return nil
 }
 
+// SetValid mark a session as valid. Session valid if
+// initialized with Hello command
 func (s *Session) SetValid(valid bool) {
 	s.Validity = true
 }
 
+// Valid check a validality of session
 func (s *Session) Valid() bool {
 	return s.Validity
 }
