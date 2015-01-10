@@ -207,7 +207,15 @@ func (s *Session) Serve() {
 		case "\r\n":
 			log.Println("enter")
 		case "EHLO":
-			log.Println(c.Verb())
+			ehloOkResp := "250-mxa.maillennia.com OK\r\n" +
+				"250-HELO\r\n" +
+				"250-TEST\r\n" +
+				"250 DONE"
+			err := s.Reply.Transmit(ehloOkResp)
+			if err != nil {
+				return
+			}
+
 		case "HELO":
 			log.Println(c.Verb())
 		case "DATA":
