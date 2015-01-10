@@ -5,7 +5,7 @@ libs package.
 
 example of usage :
 
-```
+```go
 // SMTP server in go
 package main
 
@@ -40,9 +40,6 @@ func main() {
 
         // define a session
         s := session.New(conn)
-        s.HandleHello(func() {})
-        s.HandleMail(func(){})
-        s.NewExtension()
 
         // handle every new connected session concurrently
         go s.Serve()
