@@ -65,6 +65,36 @@ func (c command) Valid() (bool, error) {
 		return false, errors.New("Command not terminated with <CRLF>")
 	}
 
+	// Validate specific command
+	line := c.String()
+	i := len(c.Verb())
+	arg := strings.TrimSpace(line[i:])
+	s := strings.Split(arg, " ")
+
+	// HELO & EHLO should have an argument and not more than one
+	if c.Verb() == "EHLO" || c.Verb() == "HELO" {
+		if arg == "" {
+			return false, errors.New("Syntax error: command should have an argument")
+		}
+		if len(s) > 1 {
+			return false, errors.New("Syntax error: command should only have one argument")
+		}
+	}
+
+	// RCPT, VRFY & EXPN should have an argument
+	if c.Verb() == "RCPT TO:" || c.Verb() == "VRFY" || c.Verb() == "EXPN" {
+		if arg == "" {
+			return false, errors.New("Syntax error: command should have an argument")
+		}
+	}
+
+	// DATA, RSET & QUIT should not have an argument
+	if c.Verb() == "DATA" || c.Verb() == "RSET" || c.Verb() == "QUIT" {
+		if arg != "" {
+			return false, errors.New("Syntax error: command should not have an argument")
+		}
+	}
+
 	return true, nil
 }
 
@@ -170,6 +200,7 @@ func (s *Session) Serve() {
 			if e != nil {
 				return
 			}
+			continue
 		}
 
 		switch c.Verb() {

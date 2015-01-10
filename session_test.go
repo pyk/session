@@ -2,6 +2,7 @@ package session
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -15,20 +16,105 @@ func TestCheckValidalityOfCommand(t *testing.T) {
 		{"", false, errors.New("Syntax error")},
 		{"\r\n", true, nil},
 		{"HELLO", false, errors.New("Command not terminated with <CRLF>")},
-		{"EHLO ubuntu-trusty\r\n", true, nil},
+
+		// EHLO & HELO should only have one argument
+		{"EHLO mail.domain.com\r\n", true, nil},
+		{"EHLO mail.domain.com \r\n", true, nil},
+		{"EHLO\r\n", false, errors.New("Syntax error: command should have an argument")},
+		{"EHLO \r\n", false, errors.New("Syntax error: command should have an argument")},
+		{"EHLO mail.domain.com test\r\n", false, errors.New("Syntax error: command should only have one argument")},
+		{"EHLO mail.domain.com test 1 2 3\r\n", false, errors.New("Syntax error: command should only have one argument")},
+
+		{"HELO mail.domain.com\r\n", true, nil},
+		{"HELO mail.domain.com \r\n", true, nil},
+		{"HELO\r\n", false, errors.New("Syntax error: command should have an argument")},
+		{"HELO \r\n", false, errors.New("Syntax error: command should have an argument")},
+		{"HELO mail.domain.com test\r\n", false, errors.New("Syntax error: command should only have one argument")},
+		{"HELO mail.domain.com test 1 2 3\r\n", false, errors.New("Syntax error: command should only have one argument")},
+
+		// MAIL may have an reverse-path
+		{"MAIL FROM:\r\n", true, nil},
+		{"MAIL FROM: \r\n", true, nil},
+		{"MAIL FROM: reverse-path\r\n", true, nil},
+		{"MAIL FROM: reverse-path \r\n", true, nil},
+		{"MAIL FROM: reverse-path optional-param\r\n", true, nil},
+		{"MAIL FROM: reverse-path optional-param \r\n", true, nil},
+
+		// RCPT should have an argument and may have optional params
+		{"RCPT TO:\r\n", false, errors.New("Syntax error: command should have an argument")},
+		{"RCPT TO: \r\n", false, errors.New("Syntax error: command should have an argument")},
+		{"RCPT TO: forward-path\r\n", true, nil},
+		{"RCPT TO: forward-path \r\n", true, nil},
+		{"RCPT TO: forward-path optional params\r\n", true, nil},
+		{"RCPT TO: forward-path optional params \r\n", true, nil},
+
+		// DATA should not have an argument
+		{"DATA\r\n", true, nil},
+		{"DATA \r\n", true, nil},
+		{"DATA argument\r\n", false, errors.New("Syntax error: command should not have an argument")},
+		{"DATA some argument \r\n", false, errors.New("Syntax error: command should not have an argument")},
+
+		// RSET should not have an argument
+		{"RSET\r\n", true, nil},
+		{"RSET \r\n", true, nil},
+		{"RSET argument\r\n", false, errors.New("Syntax error: command should not have an argument")},
+		{"RSET some argument \r\n", false, errors.New("Syntax error: command should not have an argument")},
+
+		// VRFY should have an argument
+		{"VRFY mail.domain.com\r\n", true, nil},
+		{"VRFY mail.domain.com \r\n", true, nil},
+		{"VRFY\r\n", false, errors.New("Syntax error: command should have an argument")},
+		{"VRFY \r\n", false, errors.New("Syntax error: command should have an argument")},
+
+		// EXPN should have an argument
+		{"EXPN mail.domain.com\r\n", true, nil},
+		{"EXPN mail.domain.com \r\n", true, nil},
+		{"EXPN\r\n", false, errors.New("Syntax error: command should have an argument")},
+		{"EXPN \r\n", false, errors.New("Syntax error: command should have an argument")},
+
+		// HELP may have an argument may
+		{"HELP\r\n", true, nil},
+		{"HELP \r\n", true, nil},
+		{"HELP COMMAND\r\n", true, nil},
+		{"HELP COMMAND \r\n", true, nil},
+
+		// NOOP argument should be ignored
+		{"NOOP\r\n", true, nil},
+		{"NOOP \r\n", true, nil},
+		{"NOOP COMMAND\r\n", true, nil},
+		{"NOOP COMMAND \r\n", true, nil},
+
+		// QUIT should not have an argument
+		{"QUIT\r\n", true, nil},
+		{"QUIT \r\n", true, nil},
+		{"QUIT argument\r\n", false, errors.New("Syntax error: command should not have an argument")},
+		{"QUIT some argument \r\n", false, errors.New("Syntax error: command should not have an argument")},
 	}
 
 	for _, input := range cases {
 		c := command(input.line)
+
+		line := c.String()
+		i := len(c.Verb())
+		arg := strings.TrimSpace(line[i:])
+		args := strings.Split(arg, " ")
+		lns := len(args)
+
 		got, err := c.Valid()
 		// check validality
 		if got != input.valid {
+			t.Logf("line: %q, len(c.Verb): %d, arg: %q, args: %v, len(args): %d", line, i, arg, args, lns)
 			t.Errorf("%q.Valid() == %t, expected %t", input.line, got, input.valid)
 		}
-		// check error message
-		if err != input.err {
+
+		if (err == nil && input.err != nil) || (err != nil && input.err == nil) {
+			t.Logf("line: %q, len(c.Verb): %d, arg: %q, args: %v, len(args): %d", line, i, arg, args, lns)
+			t.Errorf("from: %q => got: %v, expected: %v", input.line, err, input.err)
+		}
+		if err != nil && input.err != nil {
 			if err.Error() != input.err.Error() {
-				t.Errorf("got %v, expected %v", err, input.err)
+				t.Logf("line: %q, len(c.Verb): %d, arg: %q, args: %v, len(args): %d", line, i, arg, args, lns)
+				t.Errorf("from: %q => got: %v, expected: %v", input.line, err, input.err)
 			}
 		}
 	}
