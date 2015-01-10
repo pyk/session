@@ -12,6 +12,7 @@ import (
 // define replies
 const (
 	REPLY_220 = "220 Maillennia ready"
+	REPLY_221 = "221 OK bye"
 	REPLY_440 = "440 Command not received. Please try again"
 	REPLY_502 = "502 5.5.1 Unrecognized command."
 
