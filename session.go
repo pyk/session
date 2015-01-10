@@ -223,7 +223,11 @@ func (s *Session) Serve() {
 		case "RSET":
 			log.Println(c.Verb())
 		case "QUIT":
-			log.Println(c.Verb())
+			err := s.Reply.Transmit(REPLY_221)
+			if err != nil {
+				return
+			}
+			return
 		case "NOOP":
 			log.Println(c.Verb())
 		case "HELP":
