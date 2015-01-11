@@ -13,11 +13,13 @@ import (
 const (
 	REPLY_220 = "220 Maillennia ready"
 	REPLY_221 = "221 OK bye"
+	REPLY_250 = "250 OK"
 	REPLY_440 = "440 Command not received. Please try again"
 	REPLY_502 = "502 5.5.1 Unrecognized command."
 
 	// transmitted with error
 	REPLY_500 = "500 "
+	REPLY_501 = "501 "
 )
 
 // reply represents a SMTP Replies
@@ -73,11 +75,8 @@ func (c command) Valid() (bool, error) {
 
 	// HELO & EHLO should have an argument and not more than one
 	if c.Verb() == "EHLO" || c.Verb() == "HELO" {
-		if arg == "" {
-			return false, errors.New("Syntax error: command should have an argument")
-		}
-		if len(s) > 1 {
-			return false, errors.New("Syntax error: command should only have one argument")
+		if arg == "" || len(s) > 1 {
+			return false, errors.New("5.5.4 Invalid command arguments")
 		}
 	}
 
@@ -196,7 +195,7 @@ func (s *Session) Serve() {
 		valid, err := c.Valid()
 		if !valid && err != nil {
 			// send a reply with custom error
-			e := s.Reply.TransmitWithErr(REPLY_500, err)
+			e := s.Reply.TransmitWithErr(REPLY_501, err)
 			if e != nil {
 				return
 			}
@@ -204,6 +203,11 @@ func (s *Session) Serve() {
 		}
 
 		switch c.Verb() {
+		case "HELO":
+			err := s.Reply.Transmit(REPLY_250)
+			if err != nil {
+				return
+			}
 		case "\r\n":
 			log.Println("enter")
 		case "EHLO":
@@ -215,9 +219,6 @@ func (s *Session) Serve() {
 			if err != nil {
 				return
 			}
-
-		case "HELO":
-			log.Println(c.Verb())
 		case "DATA":
 			log.Println(c.Verb())
 		case "RSET":

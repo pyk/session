@@ -20,17 +20,17 @@ func TestCheckValidalityOfCommand(t *testing.T) {
 		// EHLO & HELO should only have one argument
 		{"EHLO mail.domain.com\r\n", true, nil},
 		{"EHLO mail.domain.com \r\n", true, nil},
-		{"EHLO\r\n", false, errors.New("Syntax error: command should have an argument")},
-		{"EHLO \r\n", false, errors.New("Syntax error: command should have an argument")},
-		{"EHLO mail.domain.com test\r\n", false, errors.New("Syntax error: command should only have one argument")},
-		{"EHLO mail.domain.com test 1 2 3\r\n", false, errors.New("Syntax error: command should only have one argument")},
+		{"EHLO\r\n", false, errors.New("5.5.4 Invalid command arguments")},
+		{"EHLO \r\n", false, errors.New("5.5.4 Invalid command arguments")},
+		{"EHLO mail.domain.com test\r\n", false, errors.New("5.5.4 Invalid command arguments")},
+		{"EHLO mail.domain.com test 1 2 3\r\n", false, errors.New("5.5.4 Invalid command arguments")},
 
 		{"HELO mail.domain.com\r\n", true, nil},
 		{"HELO mail.domain.com \r\n", true, nil},
-		{"HELO\r\n", false, errors.New("Syntax error: command should have an argument")},
-		{"HELO \r\n", false, errors.New("Syntax error: command should have an argument")},
-		{"HELO mail.domain.com test\r\n", false, errors.New("Syntax error: command should only have one argument")},
-		{"HELO mail.domain.com test 1 2 3\r\n", false, errors.New("Syntax error: command should only have one argument")},
+		{"HELO\r\n", false, errors.New("5.5.4 Invalid command arguments")},
+		{"HELO \r\n", false, errors.New("5.5.4 Invalid command arguments")},
+		{"HELO mail.domain.com test\r\n", false, errors.New("5.5.4 Invalid command arguments")},
+		{"HELO mail.domain.com test 1 2 3\r\n", false, errors.New("5.5.4 Invalid command arguments")},
 
 		// MAIL may have an reverse-path
 		{"MAIL FROM:\r\n", true, nil},
