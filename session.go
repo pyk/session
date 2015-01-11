@@ -208,17 +208,14 @@ func (s *Session) Serve() {
 			if err != nil {
 				return
 			}
-		case "\r\n":
-			log.Println("enter")
 		case "EHLO":
-			ehloOkResp := "250-mxa.maillennia.com OK\r\n" +
-				"250-HELO\r\n" +
-				"250-TEST\r\n" +
-				"250 DONE"
-			err := s.Reply.Transmit(ehloOkResp)
+			// TODO: implment Extended SMTP
+			err := s.Reply.Transmit(REPLY_250)
 			if err != nil {
 				return
 			}
+		case "\r\n":
+			log.Println("enter")
 		case "DATA":
 			log.Println(c.Verb())
 		case "RSET":
