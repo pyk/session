@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"strings"
+	"sync"
 )
 
 // define replies
@@ -14,8 +15,9 @@ const (
 	REPLY_220 = "220 Maillennia ready"
 	REPLY_221 = "221 OK bye"
 	REPLY_250 = "250 OK"
-	REPLY_440 = "440 Command not received. Please try again"
-	REPLY_502 = "502 5.5.1 Unrecognized command."
+	REPLY_421 = "421 <host> Service not available"
+	REPLY_453 = "453 5.3.2 System not accepting network message"
+	REPLY_503 = "503 5.5.1 Invalid command"
 
 	// transmitted with error
 	REPLY_500 = "500 "
@@ -135,10 +137,12 @@ type Session struct {
 	Reader   *bufio.Reader
 	Writer   *bufio.Writer
 	Reply    *Reply
+	Wg       *sync.WaitGroup
+	Closed   chan bool
 }
 
 // New create a new session
-func New(conn net.Conn) *Session {
+func New(conn net.Conn, wg *sync.WaitGroup, closed chan bool) *Session {
 	rp := &Reply{
 		w: bufio.NewWriter(conn),
 	}
@@ -149,11 +153,16 @@ func New(conn net.Conn) *Session {
 		Reader:   bufio.NewReader(conn),
 		Writer:   bufio.NewWriter(conn),
 		Reply:    rp,
+		Wg:       wg,
+		Closed:   closed,
 	}
 }
 
 // Close close the open connection of session
 func (s *Session) Close() error {
+	s.Wg.Done()
+	log.Println("session:", s.Conn.RemoteAddr(), "disconnected")
+
 	err := s.Conn.Close()
 	if err != nil {
 		return err
@@ -176,16 +185,27 @@ func (s *Session) Valid() bool {
 func (s *Session) Serve() {
 	defer s.Close()
 
+	log.Println("session:", s.Conn.RemoteAddr(), "connected")
 	err := s.Reply.Transmit(REPLY_220)
 	if err != nil {
 		return
 	}
 
 	for {
+		select {
+		case <-s.Closed:
+			err := s.Reply.Transmit(REPLY_453)
+			if err != nil {
+				return
+			}
+			return
+		default:
+		}
+
 		// read from connection, return non-escaped string include \r\n
 		line, err := s.Reader.ReadString('\n')
 		if err != nil {
-			err := s.Reply.Transmit(REPLY_440)
+			err := s.Reply.Transmit(REPLY_453)
 			if err != nil {
 				return
 			}
@@ -239,8 +259,7 @@ func (s *Session) Serve() {
 		case "RCPT TO:":
 			log.Println(c.Verb())
 		default:
-			err := errors.New("Command unrecognized")
-			e := s.Reply.TransmitWithErr(REPLY_500, err)
+			e := s.Reply.Transmit(REPLY_503)
 			if e != nil {
 				return
 			}
