@@ -11,9 +11,10 @@ import (
 )
 
 // define replies
+// TODO: add host command flags
 const (
-	REPLY_220 = "220 Maillennia ready"
-	REPLY_221 = "221 OK bye"
+	REPLY_220 = "220 <host> Maillennia ESMTP ready"
+	REPLY_221 = "221 <host> OK bye"
 	REPLY_250 = "250 OK"
 	REPLY_421 = "421 <host> Service not available"
 	REPLY_453 = "453 5.3.2 System not accepting network message"
@@ -70,6 +71,7 @@ func (c command) Valid() (bool, error) {
 	}
 
 	// Validate specific command
+	// TODO: implement this on c.Arg()
 	line := c.String()
 	i := len(c.Verb())
 	arg := strings.TrimSpace(line[i:])
@@ -161,7 +163,7 @@ func New(conn net.Conn, wg *sync.WaitGroup, closed chan bool) *Session {
 // Close close the open connection of session
 func (s *Session) Close() error {
 	s.Wg.Done()
-	log.Println("session:", s.Conn.RemoteAddr(), "disconnected")
+	// log.Println("session:", s.Conn.RemoteAddr(), "disconnected")
 
 	err := s.Conn.Close()
 	if err != nil {
@@ -185,13 +187,19 @@ func (s *Session) Valid() bool {
 func (s *Session) Serve() {
 	defer s.Close()
 
-	log.Println("session:", s.Conn.RemoteAddr(), "connected")
+	// log.Println("session:", s.Conn.RemoteAddr(), "connected")
 	err := s.Reply.Transmit(REPLY_220)
 	if err != nil {
 		return
 	}
 
+	// reject connection temporary
+	// 421 Service not available
+	// when is service not available?
+	// in what event occurs?
+
 	for {
+		// gracefully shutdown. receive signal from SMTP server
 		select {
 		case <-s.Closed:
 			err := s.Reply.Transmit(REPLY_453)
