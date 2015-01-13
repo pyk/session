@@ -13,12 +13,13 @@ import (
 // define replies
 // TODO: add host command flags
 const (
-	REPLY_220 = "220 <host> Maillennia ESMTP ready"
-	REPLY_221 = "221 <host> OK bye"
-	REPLY_250 = "250 OK"
-	REPLY_421 = "421 <host> Service not available"
-	REPLY_453 = "453 5.3.2 System not accepting network message"
-	REPLY_503 = "503 5.5.1 Invalid command"
+	REPLY_220      = "220 <host> Maillennia ESMTP ready"
+	REPLY_221      = "221 <host> OK bye"
+	REPLY_250      = "250 2.0.0 OK"
+	REPLY_421      = "421 4.4.2 Bad connection"
+	REPLY_453      = "453 5.3.2 System not accepting network message"
+	REPLY_503      = "503 5.5.1 Invalid command"
+	REPLY_503_ehlo = "503 5.5.1 HELO/EHLO first"
 
 	// transmitted with error
 	REPLY_500 = "500 "
@@ -123,40 +124,41 @@ func (c command) Verb() string {
 	return ""
 }
 
-func (c command) Arg() string {
-	// TODO: extract argument from command string
-	s := strings.Split(string(c), " ")
-	if len(s) > 1 {
-		return s[1]
+// Arg extract argument from command
+func (c command) Arg() (string, error) {
+	if c.String() == "\r\n" {
+		return "", nil
 	}
-	return ""
+	line := strings.TrimSpace(c.String())
+	lenVerb := len(c.Verb())
+	return strings.TrimSpace(line[lenVerb:]), nil
 }
 
 // Session represents session on new connection
 type Session struct {
-	Conn     net.Conn
-	Validity bool
-	Reader   *bufio.Reader
-	Writer   *bufio.Writer
-	Reply    *Reply
-	Wg       *sync.WaitGroup
-	Closed   chan bool
+	Conn       net.Conn
+	Validity   bool
+	Reader     *bufio.Reader
+	Writer     *bufio.Writer
+	Reply      *Reply
+	Wg         *sync.WaitGroup
+	ChanClosed chan bool
 }
 
 // New create a new session
-func New(conn net.Conn, wg *sync.WaitGroup, closed chan bool) *Session {
+func New(conn net.Conn, wg *sync.WaitGroup, chanclosed chan bool) *Session {
 	rp := &Reply{
 		w: bufio.NewWriter(conn),
 	}
 
 	return &Session{
-		Conn:     conn,
-		Validity: false,
-		Reader:   bufio.NewReader(conn),
-		Writer:   bufio.NewWriter(conn),
-		Reply:    rp,
-		Wg:       wg,
-		Closed:   closed,
+		Conn:       conn,
+		Validity:   false,
+		Reader:     bufio.NewReader(conn),
+		Writer:     bufio.NewWriter(conn),
+		Reply:      rp,
+		Wg:         wg,
+		ChanClosed: chanclosed,
 	}
 }
 
@@ -183,6 +185,23 @@ func (s *Session) Valid() bool {
 	return s.Validity
 }
 
+// CheckChanClosed check a channel ChanClosed if received then
+// reply with 453 and close the connection
+func (s *Session) CheckChanClosed() bool {
+	// if signal for close the session received
+	// then close the session gracefully
+	select {
+	case <-s.ChanClosed:
+		err := s.Reply.Transmit(REPLY_453)
+		if err != nil {
+			return true
+		}
+		return true
+	default:
+		return false
+	}
+}
+
 // Serve serve connected SMTP sender
 func (s *Session) Serve() {
 	defer s.Close()
@@ -199,16 +218,6 @@ func (s *Session) Serve() {
 	// in what event occurs?
 
 	for {
-		// gracefully shutdown. receive signal from SMTP server
-		select {
-		case <-s.Closed:
-			err := s.Reply.Transmit(REPLY_453)
-			if err != nil {
-				return
-			}
-			return
-		default:
-		}
 
 		// read from connection, return non-escaped string include \r\n
 		line, err := s.Reader.ReadString('\n')
@@ -217,6 +226,12 @@ func (s *Session) Serve() {
 			if err != nil {
 				return
 			}
+		}
+
+		// check signal from smtp server
+		chanClosed := s.CheckChanClosed()
+		if chanClosed {
+			return
 		}
 
 		c := command(line)
