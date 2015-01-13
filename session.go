@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"regexp"
 	"strings"
 	"sync"
 )
@@ -24,6 +25,10 @@ const (
 	// transmitted with error
 	REPLY_500 = "500 "
 	REPLY_501 = "501 "
+)
+
+var (
+	rOriginAddr = regexp.MustCompile(`[a-zA-Z0-9._-]+@(?:[a-zA-Z0-9._-]+\.)+[a-zA-Z]{2,}`)
 )
 
 // reply represents a SMTP Replies
@@ -131,6 +136,21 @@ func (c command) Arg() string {
 	return arg
 }
 
+// EmailAddress extract email address from command arguments
+func (c command) EmailAddress() string {
+	return rOriginAddr.FindString(c.Arg())
+}
+
+// Envelopes represents envelope for mail object
+// on each session
+type Envelope struct {
+	OriginatorAddress string
+	RecipientAddress  []string
+	Extension         string
+}
+
+func NewEnvelope() *Envelope {
+	return &Envelope{}
 }
 
 // Session represents session on new connection
@@ -216,6 +236,9 @@ func (s *Session) Serve() {
 	// when is service not available?
 	// in what event occurs?
 
+	// create new envelope
+	envl := NewEnvelope()
+
 	for {
 
 		// read from connection, return non-escaped string include \r\n
@@ -246,16 +269,41 @@ func (s *Session) Serve() {
 
 		switch c.Verb() {
 		case "HELO":
+			s.SetValid(true)
 			err := s.Reply.Transmit(REPLY_250)
 			if err != nil {
 				return
 			}
 		case "EHLO":
+			s.SetValid(true)
 			// TODO: implment Extended SMTP
 			err := s.Reply.Transmit(REPLY_250)
 			if err != nil {
 				return
 			}
+		case "MAIL FROM:":
+			if !s.Valid() {
+				err := s.Reply.Transmit(REPLY_503_ehlo)
+				if err != nil {
+					return
+				}
+				continue
+			}
+
+			// IDE VALIDASI: kalo env.OriginatorAddress == "" maka
+			// MAIL FROM tidak valid?
+
+			// fill the OriginatorAddress & Extension of envelope here
+			envl.OriginatorAddress = c.EmailAddress()
+			// envl.Extension = "extension"
+
+			err := s.Reply.Transmit(REPLY_250)
+			if err != nil {
+				return
+			}
+		case "RCPT TO:":
+			log.Println(c.Verb())
+
 		case "\r\n":
 			log.Println("enter")
 		case "DATA":
@@ -275,10 +323,6 @@ func (s *Session) Serve() {
 		case "EXPN":
 			log.Println(c.Verb())
 		case "VRFY":
-			log.Println(c.Verb())
-		case "MAIL FROM:":
-			log.Println(c.Verb())
-		case "RCPT TO:":
 			log.Println(c.Verb())
 		default:
 			e := s.Reply.Transmit(REPLY_503)

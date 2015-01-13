@@ -194,3 +194,26 @@ func TestCommandArg(t *testing.T) {
 	}
 }
 
+func TestCommandEmailAddress(t *testing.T) {
+	cases := []struct {
+		valid_line, expected_email_addr string
+	}{
+		{"EHLO ubuntu-trusty\r\n", ""},
+		{"HELO ubuntu-trusty\r\n", ""},
+
+		{"MAIL FROM:<some@domain.com>\r\n", "some@domain.com"},
+		{"MAIL FROM:<some@domain.com> with-extension\r\n", "some@domain.com"},
+		{"MAIL FROM:<some12@sub.domain.com> with-extension\r\n", "some12@sub.domain.com"},
+		{"MAIL FROM:<some12-ds@sub.domain.com> with-extension\r\n", "some12-ds@sub.domain.com"},
+		{"MAIL FROM:<some_rods@sub.domain.com> with-extension\r\n", "some_rods@sub.domain.com"},
+		{"MAIL FROM:<some.another@sub.domain.com> with-extension\r\n", "some.another@sub.domain.com"},
+		{"MAIL FROM:<some.anot-her@sub.domain.com> with-extension\r\n", "some.anot-her@sub.domain.com"},
+	}
+
+	for _, input := range cases {
+		emailAddr := command(input.valid_line).EmailAddress()
+		if emailAddr != input.expected_email_addr {
+			t.Errorf("%q: got %q, expected %q", input.valid_line, emailAddr, input.expected_email_addr)
+		}
+	}
+}
