@@ -41,8 +41,8 @@ func TestCheckValidalityOfCommand(t *testing.T) {
 		{"MAIL FROM: reverse-path optional-param \r\n", true, nil},
 
 		// RCPT should have an argument and may have optional params
-		{"RCPT TO:\r\n", false, errors.New("Syntax error: command should have an argument")},
-		{"RCPT TO: \r\n", false, errors.New("Syntax error: command should have an argument")},
+		{"RCPT TO:\r\n", false, errors.New("5.5.4 Invalid command arguments")},
+		{"RCPT TO: \r\n", false, errors.New("5.5.4 Invalid command arguments")},
 		{"RCPT TO: forward-path\r\n", true, nil},
 		{"RCPT TO: forward-path \r\n", true, nil},
 		{"RCPT TO: forward-path optional params\r\n", true, nil},
@@ -51,26 +51,26 @@ func TestCheckValidalityOfCommand(t *testing.T) {
 		// DATA should not have an argument
 		{"DATA\r\n", true, nil},
 		{"DATA \r\n", true, nil},
-		{"DATA argument\r\n", false, errors.New("Syntax error: command should not have an argument")},
-		{"DATA some argument \r\n", false, errors.New("Syntax error: command should not have an argument")},
+		{"DATA argument\r\n", false, errors.New("5.5.4 Invalid command arguments")},
+		{"DATA some argument \r\n", false, errors.New("5.5.4 Invalid command arguments")},
 
 		// RSET should not have an argument
 		{"RSET\r\n", true, nil},
 		{"RSET \r\n", true, nil},
-		{"RSET argument\r\n", false, errors.New("Syntax error: command should not have an argument")},
-		{"RSET some argument \r\n", false, errors.New("Syntax error: command should not have an argument")},
+		{"RSET argument\r\n", false, errors.New("5.5.4 Invalid command arguments")},
+		{"RSET some argument \r\n", false, errors.New("5.5.4 Invalid command arguments")},
 
 		// VRFY should have an argument
 		{"VRFY mail.domain.com\r\n", true, nil},
 		{"VRFY mail.domain.com \r\n", true, nil},
-		{"VRFY\r\n", false, errors.New("Syntax error: command should have an argument")},
-		{"VRFY \r\n", false, errors.New("Syntax error: command should have an argument")},
+		{"VRFY\r\n", false, errors.New("5.5.4 Invalid command arguments")},
+		{"VRFY \r\n", false, errors.New("5.5.4 Invalid command arguments")},
 
 		// EXPN should have an argument
 		{"EXPN mail.domain.com\r\n", true, nil},
 		{"EXPN mail.domain.com \r\n", true, nil},
-		{"EXPN\r\n", false, errors.New("Syntax error: command should have an argument")},
-		{"EXPN \r\n", false, errors.New("Syntax error: command should have an argument")},
+		{"EXPN\r\n", false, errors.New("5.5.4 Invalid command arguments")},
+		{"EXPN \r\n", false, errors.New("5.5.4 Invalid command arguments")},
 
 		// HELP may have an argument may
 		{"HELP\r\n", true, nil},
@@ -87,8 +87,8 @@ func TestCheckValidalityOfCommand(t *testing.T) {
 		// QUIT should not have an argument
 		{"QUIT\r\n", true, nil},
 		{"QUIT \r\n", true, nil},
-		{"QUIT argument\r\n", false, errors.New("Syntax error: command should not have an argument")},
-		{"QUIT some argument \r\n", false, errors.New("Syntax error: command should not have an argument")},
+		{"QUIT argument\r\n", false, errors.New("5.5.4 Invalid command arguments")},
+		{"QUIT some argument \r\n", false, errors.New("5.5.4 Invalid command arguments")},
 	}
 
 	for _, input := range cases {
