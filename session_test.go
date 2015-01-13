@@ -159,3 +159,38 @@ func TestCommandVerb(t *testing.T) {
 		}
 	}
 }
+
+func TestCommandArg(t *testing.T) {
+	cases := []struct {
+		valid_line, expected_arg string
+	}{
+		{"\r\n", ""},
+		{"EHLO some-string\r\n", "some-string"},
+		{"HELO some-string\r\n", "some-string"},
+		{"ehlo some-string\r\n", "some-string"},
+		{"helo some-string\r\n", "some-string"},
+		{"NOOP some-string\r\n", "some-string"},
+		{"noop some-string\r\n", "some-string"},
+		{"HELP some-string\r\n", "some-string"},
+		{"HELP some-string\r\n", "some-string"},
+		{"EXPN some-string\r\n", "some-string"},
+		{"expn some-string\r\n", "some-string"},
+		{"VRFY some-string\r\n", "some-string"},
+		{"vrfy some-string\r\n", "some-string"},
+
+		{"MAIL FROM:<reverse-path> <mail-parameter>\r\n", "<reverse-path> <mail-parameter>"},
+		{"mail from: <reverse-path> <mail-parameter>\r\n", "<reverse-path> <mail-parameter>"},
+
+		// TODO: validate RCPT TO arg
+		// {"RCPT TO: some-string\r\n", "RCPT TO:"},
+		// {"rcpt to: some-string\r\n", "RCPT TO:"},
+	}
+
+	for _, input := range cases {
+		arg := command(input.valid_line).Arg()
+		if arg != input.expected_arg {
+			t.Errorf("%q: got %q, expected %q", input.valid_line, arg, input.expected_arg)
+		}
+	}
+}
+

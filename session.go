@@ -72,30 +72,26 @@ func (c command) Valid() (bool, error) {
 	}
 
 	// Validate specific command
-	// TODO: implement this on c.Arg()
-	line := c.String()
-	i := len(c.Verb())
-	arg := strings.TrimSpace(line[i:])
-	s := strings.Split(arg, " ")
+	s := strings.Split(c.Arg(), " ")
 
 	// HELO & EHLO should have an argument and not more than one
 	if c.Verb() == "EHLO" || c.Verb() == "HELO" {
-		if arg == "" || len(s) > 1 {
+		if c.Arg() == "" || len(s) > 1 {
 			return false, errors.New("5.5.4 Invalid command arguments")
 		}
 	}
 
 	// RCPT, VRFY & EXPN should have an argument
 	if c.Verb() == "RCPT TO:" || c.Verb() == "VRFY" || c.Verb() == "EXPN" {
-		if arg == "" {
-			return false, errors.New("Syntax error: command should have an argument")
+		if c.Arg() == "" {
+			return false, errors.New("5.5.4 Invalid command arguments")
 		}
 	}
 
 	// DATA, RSET & QUIT should not have an argument
 	if c.Verb() == "DATA" || c.Verb() == "RSET" || c.Verb() == "QUIT" {
-		if arg != "" {
-			return false, errors.New("Syntax error: command should not have an argument")
+		if c.Arg() != "" {
+			return false, errors.New("5.5.4 Invalid command arguments")
 		}
 	}
 
@@ -125,13 +121,16 @@ func (c command) Verb() string {
 }
 
 // Arg extract argument from command
-func (c command) Arg() (string, error) {
+func (c command) Arg() string {
 	if c.String() == "\r\n" {
-		return "", nil
+		return ""
 	}
-	line := strings.TrimSpace(c.String())
-	lenVerb := len(c.Verb())
-	return strings.TrimSpace(line[lenVerb:]), nil
+	line := c.String()
+	i := len(c.Verb())
+	arg := strings.TrimSpace(line[i:])
+	return arg
+}
+
 }
 
 // Session represents session on new connection
