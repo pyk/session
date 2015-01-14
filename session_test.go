@@ -13,36 +13,37 @@ func TestCheckValidalityOfCommand(t *testing.T) {
 		err   error
 	}{
 		// command should terminated with <CRLF>
-		{"", false, errors.New("Syntax error")},
+		{"", false, errors.New("555 5.5.2 Syntax error")},
 		{"\r\n", true, nil},
-		{"HELLO", false, errors.New("Command not terminated with <CRLF>")},
+		{"HELLO", false, errors.New("555 5.5.2 Syntax error")},
 
 		// EHLO & HELO should only have one argument
 		{"EHLO mail.domain.com\r\n", true, nil},
 		{"EHLO mail.domain.com \r\n", true, nil},
-		{"EHLO\r\n", false, errors.New("5.5.4 Invalid command arguments")},
-		{"EHLO \r\n", false, errors.New("5.5.4 Invalid command arguments")},
-		{"EHLO mail.domain.com test\r\n", false, errors.New("5.5.4 Invalid command arguments")},
-		{"EHLO mail.domain.com test 1 2 3\r\n", false, errors.New("5.5.4 Invalid command arguments")},
+		{"EHLO\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"EHLO \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"EHLO mail.domain.com test\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"EHLO mail.domain.com test 1 2 3\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
 
 		{"HELO mail.domain.com\r\n", true, nil},
 		{"HELO mail.domain.com \r\n", true, nil},
-		{"HELO\r\n", false, errors.New("5.5.4 Invalid command arguments")},
-		{"HELO \r\n", false, errors.New("5.5.4 Invalid command arguments")},
-		{"HELO mail.domain.com test\r\n", false, errors.New("5.5.4 Invalid command arguments")},
-		{"HELO mail.domain.com test 1 2 3\r\n", false, errors.New("5.5.4 Invalid command arguments")},
+		{"HELO\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"HELO \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"HELO mail.domain.com test\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"HELO mail.domain.com test 1 2 3\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
 
-		// MAIL may have an reverse-path
-		{"MAIL FROM:\r\n", true, nil},
-		{"MAIL FROM: \r\n", true, nil},
-		{"MAIL FROM: reverse-path\r\n", true, nil},
-		{"MAIL FROM: reverse-path \r\n", true, nil},
-		{"MAIL FROM: reverse-path optional-param\r\n", true, nil},
-		{"MAIL FROM: reverse-path optional-param \r\n", true, nil},
+		// MAIL FROM validation of reverse-path
+		{"MAIL FROM:\r\n", false, errors.New("555 5.5.2 Syntax error")},
+		{"MAIL FROM: \r\n", false, errors.New("555 5.5.2 Syntax error")},
+		{"MAIL FROM: some invalid argument\r\n", false, errors.New("555 5.5.2 Syntax error")},
+		{"MAIL FROM: some@valid.email.com\r\n", false, errors.New("555 5.5.2 Syntax error")},
+		{"MAIL FROM:<invalid-email>\r\n", false, errors.New("555 5.5.2 Syntax error")},
+		{"MAIL FROM:<some@valid.email.com>\r\n", true, nil},
+		{"MAIL FROM: <some@valid.email.com>\r\n", true, nil},
 
 		// RCPT should have an argument and may have optional params
-		{"RCPT TO:\r\n", false, errors.New("5.5.4 Invalid command arguments")},
-		{"RCPT TO: \r\n", false, errors.New("5.5.4 Invalid command arguments")},
+		{"RCPT TO:\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"RCPT TO: \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
 		{"RCPT TO: forward-path\r\n", true, nil},
 		{"RCPT TO: forward-path \r\n", true, nil},
 		{"RCPT TO: forward-path optional params\r\n", true, nil},
@@ -51,26 +52,26 @@ func TestCheckValidalityOfCommand(t *testing.T) {
 		// DATA should not have an argument
 		{"DATA\r\n", true, nil},
 		{"DATA \r\n", true, nil},
-		{"DATA argument\r\n", false, errors.New("5.5.4 Invalid command arguments")},
-		{"DATA some argument \r\n", false, errors.New("5.5.4 Invalid command arguments")},
+		{"DATA argument\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"DATA some argument \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
 
 		// RSET should not have an argument
 		{"RSET\r\n", true, nil},
 		{"RSET \r\n", true, nil},
-		{"RSET argument\r\n", false, errors.New("5.5.4 Invalid command arguments")},
-		{"RSET some argument \r\n", false, errors.New("5.5.4 Invalid command arguments")},
+		{"RSET argument\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"RSET some argument \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
 
 		// VRFY should have an argument
 		{"VRFY mail.domain.com\r\n", true, nil},
 		{"VRFY mail.domain.com \r\n", true, nil},
-		{"VRFY\r\n", false, errors.New("5.5.4 Invalid command arguments")},
-		{"VRFY \r\n", false, errors.New("5.5.4 Invalid command arguments")},
+		{"VRFY\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"VRFY \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
 
 		// EXPN should have an argument
 		{"EXPN mail.domain.com\r\n", true, nil},
 		{"EXPN mail.domain.com \r\n", true, nil},
-		{"EXPN\r\n", false, errors.New("5.5.4 Invalid command arguments")},
-		{"EXPN \r\n", false, errors.New("5.5.4 Invalid command arguments")},
+		{"EXPN\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"EXPN \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
 
 		// HELP may have an argument may
 		{"HELP\r\n", true, nil},
@@ -87,8 +88,8 @@ func TestCheckValidalityOfCommand(t *testing.T) {
 		// QUIT should not have an argument
 		{"QUIT\r\n", true, nil},
 		{"QUIT \r\n", true, nil},
-		{"QUIT argument\r\n", false, errors.New("5.5.4 Invalid command arguments")},
-		{"QUIT some argument \r\n", false, errors.New("5.5.4 Invalid command arguments")},
+		{"QUIT argument\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"QUIT some argument \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
 	}
 
 	for _, input := range cases {

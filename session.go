@@ -21,14 +21,11 @@ const (
 	REPLY_453      = "453 5.3.2 System not accepting network message"
 	REPLY_503      = "503 5.5.1 Invalid command"
 	REPLY_503_ehlo = "503 5.5.1 HELO/EHLO first"
-
-	// transmitted with error
-	REPLY_500 = "500 "
-	REPLY_501 = "501 "
 )
 
 var (
-	rOriginAddr = regexp.MustCompile(`[a-zA-Z0-9._-]+@(?:[a-zA-Z0-9._-]+\.)+[a-zA-Z]{2,}`)
+	rMailFromArg = regexp.MustCompile(`<[a-zA-Z0-9._-]+@(?:[a-zA-Z0-9._-]+\.)+[a-zA-Z]{2,}>`)
+	rOriginAddr  = regexp.MustCompile(`[a-zA-Z0-9._-]+@(?:[a-zA-Z0-9._-]+\.)+[a-zA-Z]{2,}`)
 )
 
 // reply represents a SMTP Replies
@@ -46,9 +43,9 @@ func (rp *Reply) Transmit(str string) error {
 	return nil
 }
 
-// TransmitWithErr send a reply to SMTP sender with custom error message
-func (rp *Reply) TransmitWithErr(str string, err error) error {
-	fmt.Fprintf(rp.w, "%s%s\r\n", str, err.Error())
+// TransmitErr send a reply to SMTP sender with custom error message
+func (rp *Reply) TransmitErr(err error) error {
+	fmt.Fprintf(rp.w, "%s\r\n", err.Error())
 	e := rp.w.Flush()
 	if e != nil {
 		return errors.New("Error while send a Reply")
@@ -68,12 +65,12 @@ func (c command) String() string {
 func (c command) Valid() (bool, error) {
 	// empty lines
 	if c.String() == "" {
-		return false, errors.New("Syntax error")
+		return false, errors.New("555 5.5.2 Syntax error")
 	}
 
 	// every command should terminated with <CRLF>
 	if r := strings.HasSuffix(c.String(), "\r\n"); !r {
-		return false, errors.New("Command not terminated with <CRLF>")
+		return false, errors.New("555 5.5.2 Syntax error")
 	}
 
 	// Validate specific command
@@ -82,21 +79,28 @@ func (c command) Valid() (bool, error) {
 	// HELO & EHLO should have an argument and not more than one
 	if c.Verb() == "EHLO" || c.Verb() == "HELO" {
 		if c.Arg() == "" || len(s) > 1 {
-			return false, errors.New("5.5.4 Invalid command arguments")
+			return false, errors.New("501 5.5.4 Invalid command arguments")
+		}
+	}
+
+	// MAIL FROM validation
+	if c.Verb() == "MAIL FROM:" {
+		if c.Arg() == "" || !rMailFromArg.MatchString(c.Arg()) {
+			return false, errors.New("555 5.5.2 Syntax error")
 		}
 	}
 
 	// RCPT, VRFY & EXPN should have an argument
 	if c.Verb() == "RCPT TO:" || c.Verb() == "VRFY" || c.Verb() == "EXPN" {
 		if c.Arg() == "" {
-			return false, errors.New("5.5.4 Invalid command arguments")
+			return false, errors.New("501 5.5.4 Invalid command arguments")
 		}
 	}
 
 	// DATA, RSET & QUIT should not have an argument
 	if c.Verb() == "DATA" || c.Verb() == "RSET" || c.Verb() == "QUIT" {
 		if c.Arg() != "" {
-			return false, errors.New("5.5.4 Invalid command arguments")
+			return false, errors.New("501 5.5.4 Invalid command arguments")
 		}
 	}
 
@@ -259,8 +263,8 @@ func (s *Session) Serve() {
 		c := command(line)
 		valid, err := c.Valid()
 		if !valid && err != nil {
-			// send a reply with custom error
-			e := s.Reply.TransmitWithErr(REPLY_501, err)
+			// reply with custom error
+			e := s.Reply.TransmitErr(err)
 			if e != nil {
 				return
 			}
