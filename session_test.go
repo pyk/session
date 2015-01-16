@@ -2,11 +2,12 @@ package session
 
 import (
 	"errors"
-	"strings"
 	"testing"
 )
 
-func TestCheckValidalityOfCommand(t *testing.T) {
+// TestCommandValidLine check validity of general syntax of command
+// like every command should terminated with <CLRF>, etc.
+func TestCommandValidLine(t *testing.T) {
 	cases := []struct {
 		line  string
 		valid bool
@@ -16,111 +17,27 @@ func TestCheckValidalityOfCommand(t *testing.T) {
 		{"", false, errors.New("555 5.5.2 Syntax error")},
 		{"\r\n", true, nil},
 		{"HELLO", false, errors.New("555 5.5.2 Syntax error")},
-
-		// EHLO & HELO should only have one argument
-		{"EHLO mail.domain.com\r\n", true, nil},
-		{"EHLO mail.domain.com \r\n", true, nil},
-		{"EHLO\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"EHLO \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"EHLO mail.domain.com test\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"EHLO mail.domain.com test 1 2 3\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-
-		{"HELO mail.domain.com\r\n", true, nil},
-		{"HELO mail.domain.com \r\n", true, nil},
-		{"HELO\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"HELO \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"HELO mail.domain.com test\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"HELO mail.domain.com test 1 2 3\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-
-		// MAIL FROM validation of reverse-path
-		{"MAIL FROM:\r\n", false, errors.New("555 5.5.2 Syntax error")},
-		{"MAIL FROM: \r\n", false, errors.New("555 5.5.2 Syntax error")},
-		{"MAIL FROM: some invalid argument\r\n", false, errors.New("555 5.5.2 Syntax error")},
-		{"MAIL FROM: some@valid.email.com\r\n", false, errors.New("555 5.5.2 Syntax error")},
-		{"MAIL FROM:<invalid-email>\r\n", false, errors.New("555 5.5.2 Syntax error")},
-		{"MAIL FROM:<some@valid.email.com>\r\n", true, nil},
-		{"MAIL FROM: <some@valid.email.com>\r\n", true, nil},
-
-		// RCPT should have an argument and may have optional params
-		{"RCPT TO:\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"RCPT TO: \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"RCPT TO: forward-path\r\n", true, nil},
-		{"RCPT TO: forward-path \r\n", true, nil},
-		{"RCPT TO: forward-path optional params\r\n", true, nil},
-		{"RCPT TO: forward-path optional params \r\n", true, nil},
-
-		// DATA should not have an argument
-		{"DATA\r\n", true, nil},
-		{"DATA \r\n", true, nil},
-		{"DATA argument\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"DATA some argument \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-
-		// RSET should not have an argument
-		{"RSET\r\n", true, nil},
-		{"RSET \r\n", true, nil},
-		{"RSET argument\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"RSET some argument \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-
-		// VRFY should have an argument
-		{"VRFY mail.domain.com\r\n", true, nil},
-		{"VRFY mail.domain.com \r\n", true, nil},
-		{"VRFY\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"VRFY \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-
-		// EXPN should have an argument
-		{"EXPN mail.domain.com\r\n", true, nil},
-		{"EXPN mail.domain.com \r\n", true, nil},
-		{"EXPN\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"EXPN \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-
-		// HELP may have an argument may
-		{"HELP\r\n", true, nil},
-		{"HELP \r\n", true, nil},
-		{"HELP COMMAND\r\n", true, nil},
-		{"HELP COMMAND \r\n", true, nil},
-
-		// NOOP argument should be ignored
-		{"NOOP\r\n", true, nil},
-		{"NOOP \r\n", true, nil},
-		{"NOOP COMMAND\r\n", true, nil},
-		{"NOOP COMMAND \r\n", true, nil},
-
-		// QUIT should not have an argument
-		{"QUIT\r\n", true, nil},
-		{"QUIT \r\n", true, nil},
-		{"QUIT argument\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"QUIT some argument \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
 	}
 
 	for _, input := range cases {
 		c := command(input.line)
-
-		line := c.String()
-		i := len(c.Verb())
-		arg := strings.TrimSpace(line[i:])
-		args := strings.Split(arg, " ")
-		lns := len(args)
-
-		got, err := c.Valid()
-		// check validality
+		got, err := c.ValidLine()
 		if got != input.valid {
-			t.Logf("line: %q, len(c.Verb): %d, arg: %q, args: %v, len(args): %d", line, i, arg, args, lns)
-			t.Errorf("%q.Valid() == %t, expected %t", input.line, got, input.valid)
+			t.Errorf("%q.ValidLine() == %t, expected %t", input.line, got, input.valid)
 		}
 
 		if (err == nil && input.err != nil) || (err != nil && input.err == nil) {
-			t.Logf("line: %q, len(c.Verb): %d, arg: %q, args: %v, len(args): %d", line, i, arg, args, lns)
 			t.Errorf("from: %q => got: %v, expected: %v", input.line, err, input.err)
 		}
 		if err != nil && input.err != nil {
 			if err.Error() != input.err.Error() {
-				t.Logf("line: %q, len(c.Verb): %d, arg: %q, args: %v, len(args): %d", line, i, arg, args, lns)
 				t.Errorf("from: %q => got: %v, expected: %v", input.line, err, input.err)
 			}
 		}
 	}
 }
 
+// TestCommandVerb make sure that every c.Ver() extract the correct verb from valid line
 func TestCommandVerb(t *testing.T) {
 	cases := []struct {
 		valid_line, expected_verb string
@@ -161,6 +78,7 @@ func TestCommandVerb(t *testing.T) {
 	}
 }
 
+// TestCommandArg make sure that c.Arg() extract the correct argument clause
 func TestCommandArg(t *testing.T) {
 	cases := []struct {
 		valid_line, expected_arg string
@@ -195,6 +113,47 @@ func TestCommandArg(t *testing.T) {
 	}
 }
 
+// TestValidityOfHelloCommand test validity of EHLO & HELO command
+func TestValidityOfHelloCommand(t *testing.T) {
+	cases := []struct {
+		line  string
+		valid bool
+		err   error
+	}{
+		// EHLO & HELO should only have one argument
+		{"EHLO mail.domain.com\r\n", true, nil},
+		{"EHLO mail.domain.com \r\n", true, nil},
+		{"EHLO\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"EHLO \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"EHLO mail.domain.com test\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"EHLO mail.domain.com test 1 2 3\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+
+		{"HELO mail.domain.com\r\n", true, nil},
+		{"HELO mail.domain.com \r\n", true, nil},
+		{"HELO\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"HELO \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"HELO mail.domain.com test\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"HELO mail.domain.com test 1 2 3\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+	}
+
+	for _, input := range cases {
+		got, err := command(input.line).ValidHello()
+		if got != input.valid {
+			t.Errorf("%q.Valid() == %t, expected %t", input.line, got, input.valid)
+		}
+
+		if (err == nil && input.err != nil) || (err != nil && input.err == nil) {
+			t.Errorf("from: %q => got: %v, expected: %v", input.line, err, input.err)
+		}
+		if err != nil && input.err != nil {
+			if err.Error() != input.err.Error() {
+				t.Errorf("from: %q => got: %v, expected: %v", input.line, err, input.err)
+			}
+		}
+	}
+}
+
+// TestCommandEmailAddress make sure that c.EmailAddress() extract the correct email address
 func TestCommandEmailAddress(t *testing.T) {
 	cases := []struct {
 		valid_line, expected_email_addr string
@@ -215,6 +174,105 @@ func TestCommandEmailAddress(t *testing.T) {
 		emailAddr := command(input.valid_line).EmailAddress()
 		if emailAddr != input.expected_email_addr {
 			t.Errorf("%q: got %q, expected %q", input.valid_line, emailAddr, input.expected_email_addr)
+		}
+	}
+}
+
+// TestValidityOfMailCommand test validity of MAIL command
+func TestValidityOfMailCommand(t *testing.T) {
+	cases := []struct {
+		line  string
+		valid bool
+		err   error
+	}{
+		// MAIL FROM validation of reverse-path
+		{"MAIL FROM:\r\n", false, errors.New("555 5.5.2 Syntax error")},
+		{"MAIL FROM: \r\n", false, errors.New("555 5.5.2 Syntax error")},
+		{"MAIL FROM: some invalid argument\r\n", false, errors.New("555 5.5.2 Syntax error")},
+		{"MAIL FROM: some@valid.email.com\r\n", false, errors.New("555 5.5.2 Syntax error")},
+		{"MAIL FROM:<invalid-email>\r\n", false, errors.New("555 5.5.2 Syntax error")},
+		{"MAIL FROM:<some@valid.email.com>\r\n", true, nil},
+		{"MAIL FROM: <some@valid.email.com>\r\n", true, nil},
+
+		// TODO: add validation with extension
+	}
+
+	for _, input := range cases {
+		got, err := command(input.line).ValidMail()
+		if got != input.valid {
+			t.Errorf("%q.Valid() == %t, expected %t", input.line, got, input.valid)
+		}
+
+		if (err == nil && input.err != nil) || (err != nil && input.err == nil) {
+			t.Errorf("from: %q => got: %v, expected: %v", input.line, err, input.err)
+		}
+		if err != nil && input.err != nil {
+			if err.Error() != input.err.Error() {
+				t.Errorf("from: %q => got: %v, expected: %v", input.line, err, input.err)
+			}
+		}
+	}
+}
+
+// TestValidityOfRcptCommand test validity of RCPT command
+func TestValidityOfRcptCommand(t *testing.T) {
+	cases := []struct {
+		line  string
+		valid bool
+		err   error
+	}{
+		// RCPT should have an argument and may have optional params
+		{"RCPT TO:\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"RCPT TO: \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"RCPT TO: forward-path\r\n", true, nil},
+		{"RCPT TO: forward-path \r\n", true, nil},
+		{"RCPT TO: forward-path optional params\r\n", true, nil},
+		{"RCPT TO: forward-path optional params \r\n", true, nil},
+	}
+
+	for _, input := range cases {
+		got, err := command(input.line).ValidRcpt()
+		if got != input.valid {
+			t.Errorf("%q.ValidRcpt() == %t, expected %t", input.line, got, input.valid)
+		}
+
+		if (err == nil && input.err != nil) || (err != nil && input.err == nil) {
+			t.Errorf("from: %q => got: %v, expected: %v", input.line, err, input.err)
+		}
+		if err != nil && input.err != nil {
+			if err.Error() != input.err.Error() {
+				t.Errorf("from: %q => got: %v, expected: %v", input.line, err, input.err)
+			}
+		}
+	}
+}
+
+func TestValidityOfQuitCommand(t *testing.T) {
+	cases := []struct {
+		line  string
+		valid bool
+		err   error
+	}{
+		// QUIT should not have an argument
+		{"QUIT\r\n", true, nil},
+		{"QUIT \r\n", true, nil},
+		{"QUIT argument\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"QUIT some argument \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+	}
+
+	for _, input := range cases {
+		got, err := command(input.line).ValidQuit()
+		if got != input.valid {
+			t.Errorf("%q.ValidQuit() == %t, expected %t", input.line, got, input.valid)
+		}
+
+		if (err == nil && input.err != nil) || (err != nil && input.err == nil) {
+			t.Errorf("from: %q => got: %v, expected: %v", input.line, err, input.err)
+		}
+		if err != nil && input.err != nil {
+			if err.Error() != input.err.Error() {
+				t.Errorf("from: %q => got: %v, expected: %v", input.line, err, input.err)
+			}
 		}
 	}
 }

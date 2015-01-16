@@ -28,6 +28,14 @@ var (
 	rOriginAddr  = regexp.MustCompile(`[a-zA-Z0-9._-]+@(?:[a-zA-Z0-9._-]+\.)+[a-zA-Z]{2,}`)
 )
 
+// error replies
+var (
+	ehloFirstErr         = errors.New("503 5.5.1 HELO/EHLO first")
+	mailFirstErr         = errors.New("503 5.5.1 bad squence")
+	syntaxErr            = errors.New("555 5.5.2 Syntax error")
+	invalidCommandArgErr = errors.New("501 5.5.4 Invalid command arguments")
+)
+
 // reply represents a SMTP Replies
 type Reply struct {
 	w *bufio.Writer
@@ -59,52 +67,6 @@ type command string
 // String return a command as string
 func (c command) String() string {
 	return string(c)
-}
-
-// Valid check validality of command
-func (c command) Valid() (bool, error) {
-	// empty lines
-	if c.String() == "" {
-		return false, errors.New("555 5.5.2 Syntax error")
-	}
-
-	// every command should terminated with <CRLF>
-	if r := strings.HasSuffix(c.String(), "\r\n"); !r {
-		return false, errors.New("555 5.5.2 Syntax error")
-	}
-
-	// Validate specific command
-	s := strings.Split(c.Arg(), " ")
-
-	// HELO & EHLO should have an argument and not more than one
-	if c.Verb() == "EHLO" || c.Verb() == "HELO" {
-		if c.Arg() == "" || len(s) > 1 {
-			return false, errors.New("501 5.5.4 Invalid command arguments")
-		}
-	}
-
-	// MAIL FROM validation
-	if c.Verb() == "MAIL FROM:" {
-		if c.Arg() == "" || !rMailFromArg.MatchString(c.Arg()) {
-			return false, errors.New("555 5.5.2 Syntax error")
-		}
-	}
-
-	// RCPT, VRFY & EXPN should have an argument
-	if c.Verb() == "RCPT TO:" || c.Verb() == "VRFY" || c.Verb() == "EXPN" {
-		if c.Arg() == "" {
-			return false, errors.New("501 5.5.4 Invalid command arguments")
-		}
-	}
-
-	// DATA, RSET & QUIT should not have an argument
-	if c.Verb() == "DATA" || c.Verb() == "RSET" || c.Verb() == "QUIT" {
-		if c.Arg() != "" {
-			return false, errors.New("501 5.5.4 Invalid command arguments")
-		}
-	}
-
-	return true, nil
 }
 
 // Verb extract a command verb from line
@@ -140,6 +102,69 @@ func (c command) Arg() string {
 	return arg
 }
 
+// Valid check validity general of command. syntax, arg, etc.
+func (c command) ValidLine() (bool, error) {
+	// empty lines
+	if c.String() == "" {
+		return false, syntaxErr
+	}
+
+	// every command should terminated with <CRLF>
+	if r := strings.HasSuffix(c.String(), "\r\n"); !r {
+		return false, syntaxErr
+	}
+
+	return true, nil
+}
+
+// ValidHello check validity of EHLO & HELO command
+func (c command) ValidHello() (bool, error) {
+	// HELO & EHLO should have an argument and not more than one
+	args := strings.Split(c.Arg(), " ")
+	if c.Verb() == "EHLO" || c.Verb() == "HELO" {
+		if c.Arg() == "" || len(args) > 1 {
+			return false, invalidCommandArgErr
+		}
+	}
+
+	return true, nil
+}
+
+// ValidMail check validity of MAIL command
+func (c command) ValidMail() (bool, error) {
+	if c.Verb() == "MAIL FROM:" {
+		if c.Arg() == "" || !rMailFromArg.MatchString(c.Arg()) {
+			return false, syntaxErr
+		}
+	}
+
+	return true, nil
+}
+
+// ValidRcpt check validity of RCPT command
+func (c command) ValidRcpt() (bool, error) {
+	if c.Verb() == "RCPT TO:" {
+		// RCPT should have an argument
+		if c.Arg() == "" {
+			return false, invalidCommandArgErr
+		}
+	}
+
+	return true, nil
+}
+
+// ValidQuit check validity of QUIT command
+func (c command) ValidQuit() (bool, error) {
+	if c.Verb() == "QUIT" {
+		// QUIT should not have an argument
+		if c.Arg() != "" {
+			return false, invalidCommandArgErr
+		}
+	}
+
+	return true, nil
+}
+
 // EmailAddress extract email address from command arguments
 func (c command) EmailAddress() string {
 	return rOriginAddr.FindString(c.Arg())
@@ -157,10 +182,16 @@ func NewEnvelope() *Envelope {
 	return &Envelope{}
 }
 
+// SessionValidity represent validity of each session
+type SessionValidity struct {
+	HeloFirst bool
+	MailFirst bool
+}
+
 // Session represents session on new connection
 type Session struct {
 	Conn       net.Conn
-	Validity   bool
+	Validity   *SessionValidity
 	Reader     *bufio.Reader
 	Writer     *bufio.Writer
 	Reply      *Reply
@@ -174,9 +205,14 @@ func New(conn net.Conn, wg *sync.WaitGroup, chanclosed chan bool) *Session {
 		w: bufio.NewWriter(conn),
 	}
 
+	validity := &SessionValidity{
+		HeloFirst: false,
+		MailFirst: false,
+	}
+
 	return &Session{
 		Conn:       conn,
-		Validity:   false,
+		Validity:   validity,
 		Reader:     bufio.NewReader(conn),
 		Writer:     bufio.NewWriter(conn),
 		Reply:      rp,
@@ -197,15 +233,79 @@ func (s *Session) Close() error {
 	return nil
 }
 
-// SetValid mark a session as valid. Session valid if
+// SetHeloFirst mark a session as valid. Session valid if
 // initialized with Hello command
-func (s *Session) SetValid(valid bool) {
-	s.Validity = true
+func (s *Session) SetHeloFirst(heloFirst bool) {
+	s.Validity.HeloFirst = heloFirst
 }
 
-// Valid check a validality of session
-func (s *Session) Valid() bool {
-	return s.Validity
+// SetMailFirst mark a session as valid if MAIL command
+// appear before RCPT command
+func (s *Session) SetMailFirst(mailFirst bool) {
+	s.Validity.MailFirst = mailFirst
+}
+
+func (s *Session) Valid(c command) (bool, error) {
+	// check validity of line
+	_, err := c.ValidLine()
+	if err != nil {
+		return false, err
+	}
+
+	// validation for EHLO & HELO command
+	if c.Verb() == "EHLO" || c.Verb() == "HELO" {
+		s.SetHeloFirst(true)
+		_, err := c.ValidHello()
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	// validation for MAIL command
+	if c.Verb() == "MAIL FROM:" {
+		// MUST appear after EHLO/HELO
+		if !s.Validity.HeloFirst {
+			return false, ehloFirstErr
+		}
+
+		// syntax MUST valid
+		_, err := c.ValidMail()
+		if err != nil {
+			return false, err
+		}
+
+		s.SetMailFirst(true)
+		return true, nil
+	}
+
+	// validation for RCPT command
+	if c.Verb() == "RCPT TO:" {
+		// MUST appear after EHLO/HELO
+		if !s.Validity.HeloFirst {
+			return false, ehloFirstErr
+		}
+
+		// MUST appear after MAIL
+		if !s.Validity.MailFirst {
+			return false, ehloFirstErr
+		}
+
+		_, err := c.ValidRcpt()
+		if err != nil {
+			return false, err
+		}
+	}
+
+	// validation for QUIT command
+	if c.Verb() == "QUIT TO:" {
+		_, err := c.ValidQuit()
+		if err != nil {
+			return false, err
+		}
+	}
+
+	return true, nil
 }
 
 // CheckChanClosed check a channel ChanClosed if received then
@@ -260,8 +360,10 @@ func (s *Session) Serve() {
 			return
 		}
 
+		// check validity of session like valid line,
+		// command sequences, command syntax, command argument, etc.
 		c := command(line)
-		valid, err := c.Valid()
+		valid, err := s.Valid(c)
 		if !valid && err != nil {
 			// reply with custom error
 			e := s.Reply.TransmitErr(err)
@@ -273,30 +375,17 @@ func (s *Session) Serve() {
 
 		switch c.Verb() {
 		case "HELO":
-			s.SetValid(true)
 			err := s.Reply.Transmit(REPLY_250)
 			if err != nil {
 				return
 			}
 		case "EHLO":
-			s.SetValid(true)
 			// TODO: implment Extended SMTP
 			err := s.Reply.Transmit(REPLY_250)
 			if err != nil {
 				return
 			}
 		case "MAIL FROM:":
-			if !s.Valid() {
-				err := s.Reply.Transmit(REPLY_503_ehlo)
-				if err != nil {
-					return
-				}
-				continue
-			}
-
-			// IDE VALIDASI: kalo env.OriginatorAddress == "" maka
-			// MAIL FROM tidak valid?
-
 			// fill the OriginatorAddress & Extension of envelope here
 			envl.OriginatorAddress = c.EmailAddress()
 			// envl.Extension = "extension"
