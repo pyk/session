@@ -1,7 +1,6 @@
 package session
 
 import (
-	"errors"
 	"testing"
 )
 
@@ -14,9 +13,9 @@ func TestCommandValidLine(t *testing.T) {
 		err   error
 	}{
 		// command should terminated with <CRLF>
-		{"", false, errors.New("555 5.5.2 Syntax error")},
+		{"", false, syntaxErr},
 		{"\r\n", true, nil},
-		{"HELLO", false, errors.New("555 5.5.2 Syntax error")},
+		{"HELLO", false, syntaxErr},
 	}
 
 	for _, input := range cases {
@@ -123,17 +122,17 @@ func TestValidityOfHelloCommand(t *testing.T) {
 		// EHLO & HELO should only have one argument
 		{"EHLO mail.domain.com\r\n", true, nil},
 		{"EHLO mail.domain.com \r\n", true, nil},
-		{"EHLO\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"EHLO \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"EHLO mail.domain.com test\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"EHLO mail.domain.com test 1 2 3\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"EHLO\r\n", false, invalidCommandArgErr},
+		{"EHLO \r\n", false, invalidCommandArgErr},
+		{"EHLO mail.domain.com test\r\n", false, invalidCommandArgErr},
+		{"EHLO mail.domain.com test 1 2 3\r\n", false, invalidCommandArgErr},
 
 		{"HELO mail.domain.com\r\n", true, nil},
 		{"HELO mail.domain.com \r\n", true, nil},
-		{"HELO\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"HELO \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"HELO mail.domain.com test\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"HELO mail.domain.com test 1 2 3\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"HELO\r\n", false, invalidCommandArgErr},
+		{"HELO \r\n", false, invalidCommandArgErr},
+		{"HELO mail.domain.com test\r\n", false, invalidCommandArgErr},
+		{"HELO mail.domain.com test 1 2 3\r\n", false, invalidCommandArgErr},
 	}
 
 	for _, input := range cases {
@@ -168,6 +167,10 @@ func TestCommandEmailAddress(t *testing.T) {
 		{"MAIL FROM:<some_rods@sub.domain.com> with-extension\r\n", "some_rods@sub.domain.com"},
 		{"MAIL FROM:<some.another@sub.domain.com> with-extension\r\n", "some.another@sub.domain.com"},
 		{"MAIL FROM:<some.anot-her@sub.domain.com> with-extension\r\n", "some.anot-her@sub.domain.com"},
+
+		{"RCPT TO:<some@domain.com>\r\n", "some@domain.com"},
+		{"RCPT TO:<@host.io:some@domain.com> with-extension\r\n", "some@domain.com"},
+		{"RCPT TO:<@host.io,@abchost.com:some@domain.com> with-extension\r\n", "some@domain.com"},
 	}
 
 	for _, input := range cases {
@@ -186,14 +189,15 @@ func TestValidityOfMailCommand(t *testing.T) {
 		err   error
 	}{
 		// MAIL FROM validation of reverse-path
-		{"MAIL FROM:\r\n", false, errors.New("555 5.5.2 Syntax error")},
-		{"MAIL FROM: \r\n", false, errors.New("555 5.5.2 Syntax error")},
-		{"MAIL FROM: some invalid argument\r\n", false, errors.New("555 5.5.2 Syntax error")},
-		{"MAIL FROM: some@valid.email.com\r\n", false, errors.New("555 5.5.2 Syntax error")},
-		{"MAIL FROM:<invalid-email>\r\n", false, errors.New("555 5.5.2 Syntax error")},
+		{"MAIL FROM:\r\n", false, syntaxErr},
+		{"MAIL FROM: \r\n", false, syntaxErr},
+		{"MAIL FROM: some invalid argument\r\n", false, invalidCommandArgErr},
+		{"MAIL FROM: some@valid.email.com\r\n", false, invalidCommandArgErr},
+		{"MAIL FROM:<invalid-email>\r\n", false, invalidCommandArgErr},
+		{"MAIL FROM:<some@valid-email.com,twice@appear.this.com>\r\n", false, invalidCommandArgErr},
+
 		{"MAIL FROM:<some@valid.email.com>\r\n", true, nil},
 		{"MAIL FROM: <some@valid.email.com>\r\n", true, nil},
-
 		// TODO: add validation with extension
 	}
 
@@ -221,13 +225,22 @@ func TestValidityOfRcptCommand(t *testing.T) {
 		valid bool
 		err   error
 	}{
-		// RCPT should have an argument and may have optional params
-		{"RCPT TO:\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"RCPT TO: \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"RCPT TO: forward-path\r\n", true, nil},
-		{"RCPT TO: forward-path \r\n", true, nil},
-		{"RCPT TO: forward-path optional params\r\n", true, nil},
-		{"RCPT TO: forward-path optional params \r\n", true, nil},
+		// syntax error
+		{"RCPT TO:\r\n", false, syntaxErr},
+		{"RCPT TO: \r\n", false, syntaxErr},
+		{"RCPT TO: some random arg\r\n", false, syntaxErr},
+
+		{"RCPT TO:<invalid formatted email>\r\n", false, invalidRcptEmailErr},
+		{"RCPT TO:<some@email.com,some@anothermail.com>\r\n", false, invalidRcptEmailErr},
+		{"RCPT TO: <@hostA.io,@hostB.io:some@email.com,some@anohet.com>\r\n", false, invalidRcptEmailErr},
+
+		// source route & email
+		// syntaxically valid email addres
+		// NOTE: every email address should validated, MUST exist on database
+		// {"RCPT TO:<some@email.com>\r\n", true, nil},
+		// {"RCPT TO: <some@email.com> \r\n", true, nil},
+		// {"RCPT TO:<@hosta.com, @hostb.com:some@email.com> \r\n", true, nil},
+
 	}
 
 	for _, input := range cases {
@@ -256,8 +269,8 @@ func TestValidityOfQuitCommand(t *testing.T) {
 		// QUIT should not have an argument
 		{"QUIT\r\n", true, nil},
 		{"QUIT \r\n", true, nil},
-		{"QUIT argument\r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
-		{"QUIT some argument \r\n", false, errors.New("501 5.5.4 Invalid command arguments")},
+		{"QUIT argument\r\n", false, invalidCommandArgErr},
+		{"QUIT some argument \r\n", false, invalidCommandArgErr},
 	}
 
 	for _, input := range cases {

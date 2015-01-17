@@ -17,23 +17,36 @@ const (
 	REPLY_220      = "220 <host> Maillennia ESMTP ready"
 	REPLY_221      = "221 <host> OK bye"
 	REPLY_250      = "250 2.0.0 OK"
+	REPLY_250_RCPT = "250 2.1.5 OK"
 	REPLY_421      = "421 4.4.2 Bad connection"
 	REPLY_453      = "453 5.3.2 System not accepting network message"
 	REPLY_503      = "503 5.5.1 Invalid command"
-	REPLY_503_ehlo = "503 5.5.1 HELO/EHLO first"
 )
 
+// predefined regex
 var (
-	rMailFromArg = regexp.MustCompile(`<[a-zA-Z0-9._-]+@(?:[a-zA-Z0-9._-]+\.)+[a-zA-Z]{2,}>`)
-	rOriginAddr  = regexp.MustCompile(`[a-zA-Z0-9._-]+@(?:[a-zA-Z0-9._-]+\.)+[a-zA-Z]{2,}`)
+	rArgSyntax = regexp.MustCompile(`<(.+)>`)
+	rMailAddr  = regexp.MustCompile(`[a-zA-Z0-9._-]+@(?:[a-zA-Z0-9._-]+\.)+[a-zA-Z]{2,}`)
+	rRcptArg   = regexp.MustCompile(`<(?:@(?:[a-zA-Z0-9._-]+\.)+[a-zA-Z]{2,},?)*:?[a-zA-Z0-9._-]+@(?:[a-zA-Z0-9._-]+\.)+[a-zA-Z]{2,}>`)
+	rMailArg   = regexp.MustCompile(`<[a-zA-Z0-9._-]+@(?:[a-zA-Z0-9._-]+\.)+[a-zA-Z]{2,}>`)
 )
 
 // error replies
 var (
 	ehloFirstErr         = errors.New("503 5.5.1 HELO/EHLO first")
-	mailFirstErr         = errors.New("503 5.5.1 bad squence")
+	mailFirstErr         = errors.New("503 5.5.1 Bad sequence of commands") // TODO: improve err reply of bad sequence command
 	syntaxErr            = errors.New("555 5.5.2 Syntax error")
 	invalidCommandArgErr = errors.New("501 5.5.4 Invalid command arguments")
+
+	invalidRcptEmailErr = errors.New("553-5.1.2 Invalid recipient email address.\r\n" +
+		"553-5.1.2 Please Check for any spelling errors\r\n" +
+		"553-5.1.2 make sure before & after recipient email address\r\n" +
+		"553 5.1.2 doesn't contain periods, spaces, or other punctuation.")
+
+	emailNotExistErr = errors.New("550-5.1.1 Recipient email address doesn't exist.\r\n" +
+		"550-5.1.1 Please Check for any spelling errors\r\n" +
+		"550-5.1.1 make sure before & after recipient email address\r\n" +
+		"550 5.1.1 doesn't contain periods, spaces, or other punctuation.")
 )
 
 // reply represents a SMTP Replies
@@ -133,8 +146,12 @@ func (c command) ValidHello() (bool, error) {
 // ValidMail check validity of MAIL command
 func (c command) ValidMail() (bool, error) {
 	if c.Verb() == "MAIL FROM:" {
-		if c.Arg() == "" || !rMailFromArg.MatchString(c.Arg()) {
+		if c.Arg() == "" {
 			return false, syntaxErr
+		}
+
+		if !rMailArg.MatchString(c.Arg()) {
+			return false, invalidCommandArgErr
 		}
 	}
 
@@ -144,10 +161,15 @@ func (c command) ValidMail() (bool, error) {
 // ValidRcpt check validity of RCPT command
 func (c command) ValidRcpt() (bool, error) {
 	if c.Verb() == "RCPT TO:" {
-		// RCPT should have an argument
-		if c.Arg() == "" {
-			return false, invalidCommandArgErr
+
+		if c.Arg() == "" || !rArgSyntax.MatchString(c.Arg()) {
+			return false, syntaxErr
 		}
+
+		if !rRcptArg.MatchString(c.Arg()) {
+			return false, invalidRcptEmailErr
+		}
+		// TODO: email address shoule exist on database
 	}
 
 	return true, nil
@@ -167,7 +189,7 @@ func (c command) ValidQuit() (bool, error) {
 
 // EmailAddress extract email address from command arguments
 func (c command) EmailAddress() string {
-	return rOriginAddr.FindString(c.Arg())
+	return rMailAddr.FindString(c.Arg())
 }
 
 // Envelopes represents envelope for mail object
@@ -254,11 +276,12 @@ func (s *Session) Valid(c command) (bool, error) {
 
 	// validation for EHLO & HELO command
 	if c.Verb() == "EHLO" || c.Verb() == "HELO" {
-		s.SetHeloFirst(true)
 		_, err := c.ValidHello()
 		if err != nil {
 			return false, err
 		}
+
+		s.SetHeloFirst(true)
 		return true, nil
 	}
 
@@ -288,7 +311,7 @@ func (s *Session) Valid(c command) (bool, error) {
 
 		// MUST appear after MAIL
 		if !s.Validity.MailFirst {
-			return false, ehloFirstErr
+			return false, mailFirstErr
 		}
 
 		_, err := c.ValidRcpt()
@@ -395,8 +418,11 @@ func (s *Session) Serve() {
 				return
 			}
 		case "RCPT TO:":
-			log.Println(c.Verb())
-
+			envl.RecipientAddress = append(envl.RecipientAddress, c.EmailAddress())
+			err := s.Reply.Transmit(REPLY_250_RCPT)
+			if err != nil {
+				return
+			}
 		case "\r\n":
 			log.Println("enter")
 		case "DATA":
