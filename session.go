@@ -175,6 +175,16 @@ func (c command) ValidRcpt() (bool, error) {
 	return true, nil
 }
 
+// ValidData check validity of DATA command
+func (c command) ValidData() (bool, error) {
+	if c.Verb() == "DATA" {
+		if c.Arg() != "" {
+			return false, syntaxErr
+		}
+	}
+	return true, nil
+}
+
 // ValidQuit check validity of QUIT command
 func (c command) ValidQuit() (bool, error) {
 	if c.Verb() == "QUIT" {
@@ -320,8 +330,16 @@ func (s *Session) Valid(c command) (bool, error) {
 		}
 	}
 
+	// validation for DATA command
+	if c.Verb() == "DATA" {
+		_, err := c.ValidData()
+		if err != nil {
+			return false, err
+		}
+	}
+
 	// validation for QUIT command
-	if c.Verb() == "QUIT TO:" {
+	if c.Verb() == "QUIT" {
 		_, err := c.ValidQuit()
 		if err != nil {
 			return false, err
@@ -423,10 +441,12 @@ func (s *Session) Serve() {
 			if err != nil {
 				return
 			}
+		case "DATA":
+			// validate command data
+			// proses message data
+			log.Println(c.Verb())
 		case "\r\n":
 			log.Println("enter")
-		case "DATA":
-			log.Println(c.Verb())
 		case "RSET":
 			log.Println(c.Verb())
 		case "QUIT":

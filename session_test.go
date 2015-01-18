@@ -260,6 +260,38 @@ func TestValidityOfRcptCommand(t *testing.T) {
 	}
 }
 
+// TestValidityOfDataCommand test validity of DATA command
+func TestValidityOfDataCommand(t *testing.T) {
+	cases := []struct {
+		line  string
+		valid bool
+		err   error
+	}{
+		{"DATA\r\n", true, nil},
+		{"data\r\n", true, nil},
+		{"DATA \r\n", true, nil},
+
+		// syntax error
+		{"DATA plus argument\r\n", false, syntaxErr},
+	}
+
+	for _, input := range cases {
+		got, err := command(input.line).ValidData()
+		if got != input.valid {
+			t.Errorf("%q.ValidData() == %t, expected %t", input.line, got, input.valid)
+		}
+
+		if (err == nil && input.err != nil) || (err != nil && input.err == nil) {
+			t.Errorf("from: %q => got: %v, expected: %v", input.line, err, input.err)
+		}
+		if err != nil && input.err != nil {
+			if err.Error() != input.err.Error() {
+				t.Errorf("from: %q => got: %v, expected: %v", input.line, err, input.err)
+			}
+		}
+	}
+}
+
 func TestValidityOfQuitCommand(t *testing.T) {
 	cases := []struct {
 		line  string
