@@ -134,10 +134,8 @@ func (c command) ValidLine() (bool, error) {
 func (c command) ValidHello() (bool, error) {
 	// HELO & EHLO should have an argument and not more than one
 	args := strings.Split(c.Arg(), " ")
-	if c.Verb() == "EHLO" || c.Verb() == "HELO" {
-		if c.Arg() == "" || len(args) > 1 {
-			return false, invalidCommandArgErr
-		}
+	if c.Arg() == "" || len(args) > 1 {
+		return false, invalidCommandArgErr
 	}
 
 	return true, nil
@@ -145,14 +143,12 @@ func (c command) ValidHello() (bool, error) {
 
 // ValidMail check validity of MAIL command
 func (c command) ValidMail() (bool, error) {
-	if c.Verb() == "MAIL FROM:" {
-		if c.Arg() == "" {
-			return false, syntaxErr
-		}
+	if c.Arg() == "" {
+		return false, syntaxErr
+	}
 
-		if !rMailArg.MatchString(c.Arg()) {
-			return false, invalidCommandArgErr
-		}
+	if !rMailArg.MatchString(c.Arg()) {
+		return false, invalidCommandArgErr
 	}
 
 	return true, nil
@@ -160,27 +156,23 @@ func (c command) ValidMail() (bool, error) {
 
 // ValidRcpt check validity of RCPT command
 func (c command) ValidRcpt() (bool, error) {
-	if c.Verb() == "RCPT TO:" {
 
-		if c.Arg() == "" || !rArgSyntax.MatchString(c.Arg()) {
-			return false, syntaxErr
-		}
-
-		if !rRcptArg.MatchString(c.Arg()) {
-			return false, invalidRcptEmailErr
-		}
-		// TODO: email address shoule exist on database
+	if c.Arg() == "" || !rArgSyntax.MatchString(c.Arg()) {
+		return false, syntaxErr
 	}
+
+	if !rRcptArg.MatchString(c.Arg()) {
+		return false, invalidRcptEmailErr
+	}
+	// TODO: email address shoule exist on database
 
 	return true, nil
 }
 
 // ValidData check validity of DATA command
 func (c command) ValidData() (bool, error) {
-	if c.Verb() == "DATA" {
-		if c.Arg() != "" {
-			return false, syntaxErr
-		}
+	if c.Arg() != "" {
+		return false, syntaxErr
 	}
 	return true, nil
 }
