@@ -15,7 +15,7 @@ import (
 // TODO: add host command flags
 const (
 	REPLY_220      = "220 <host> Maillennia ESMTP ready"
-	REPLY_221      = "221 <host> OK bye"
+	REPLY_221      = "221 2.0.0 Bye"
 	REPLY_250      = "250 2.0.0 OK"
 	REPLY_250_RCPT = "250 2.1.5 OK"
 	REPLY_354      = "354 Go ahead"
