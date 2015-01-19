@@ -18,6 +18,7 @@ const (
 	REPLY_221      = "221 <host> OK bye"
 	REPLY_250      = "250 2.0.0 OK"
 	REPLY_250_RCPT = "250 2.1.5 OK"
+	REPLY_354      = "354 Go ahead"
 	REPLY_421      = "421 4.4.2 Bad connection"
 	REPLY_453      = "453 5.3.2 System not accepting network message"
 	REPLY_503      = "503 5.5.1 Invalid command"
@@ -34,7 +35,7 @@ var (
 // error replies
 var (
 	ehloFirstErr         = errors.New("503 5.5.1 HELO/EHLO first")
-	mailFirstErr         = errors.New("503 5.5.1 Bad sequence of commands") // TODO: improve err reply of bad sequence command
+	badSeqErr            = errors.New("503 5.5.1 Bad sequence of commands") // TODO: improve err reply of bad sequence command
 	syntaxErr            = errors.New("555 5.5.2 Syntax error")
 	invalidCommandArgErr = errors.New("501 5.5.4 Invalid command arguments")
 
@@ -210,6 +211,7 @@ func NewEnvelope() *Envelope {
 type SessionValidity struct {
 	HeloFirst bool
 	MailFirst bool
+	RcptFirst bool
 }
 
 // Session represents session on new connection
@@ -232,6 +234,7 @@ func New(conn net.Conn, wg *sync.WaitGroup, chanclosed chan bool) *Session {
 	validity := &SessionValidity{
 		HeloFirst: false,
 		MailFirst: false,
+		RcptFirst: false,
 	}
 
 	return &Session{
@@ -267,6 +270,12 @@ func (s *Session) SetHeloFirst(heloFirst bool) {
 // appear before RCPT command
 func (s *Session) SetMailFirst(mailFirst bool) {
 	s.Validity.MailFirst = mailFirst
+}
+
+// SetRcptFirst mark a session as valid if MAIL command
+// appear before RCPT command
+func (s *Session) SetRcptFirst(rcptFirst bool) {
+	s.Validity.RcptFirst = rcptFirst
 }
 
 func (s *Session) Valid(c command) (bool, error) {
@@ -313,21 +322,36 @@ func (s *Session) Valid(c command) (bool, error) {
 
 		// MUST appear after MAIL
 		if !s.Validity.MailFirst {
-			return false, mailFirstErr
+			return false, badSeqErr
 		}
 
 		_, err := c.ValidRcpt()
 		if err != nil {
 			return false, err
 		}
+
+		s.SetRcptFirst(true)
+		return true, nil
 	}
 
 	// validation for DATA command
 	if c.Verb() == "DATA" {
+		// MUST appear after EHLO/HELO
+		if !s.Validity.HeloFirst {
+			return false, ehloFirstErr
+		}
+
+		// MUST appear after MAIL & RCPT
+		if !s.Validity.MailFirst || !s.Validity.RcptFirst {
+			return false, badSeqErr
+		}
+
 		_, err := c.ValidData()
 		if err != nil {
 			return false, err
 		}
+
+		return true, nil
 	}
 
 	// validation for QUIT command
@@ -336,6 +360,8 @@ func (s *Session) Valid(c command) (bool, error) {
 		if err != nil {
 			return false, err
 		}
+
+		return true, nil
 	}
 
 	return true, nil
@@ -434,9 +460,11 @@ func (s *Session) Serve() {
 				return
 			}
 		case "DATA":
-			// validate command data
-			// proses message data
-			log.Println(c.Verb())
+			err := s.Reply.Transmit(REPLY_354)
+			if err != nil {
+				return
+			}
+			// receive message data here
 		case "\r\n":
 			log.Println("enter")
 		case "RSET":
