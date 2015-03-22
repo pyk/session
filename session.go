@@ -2,6 +2,7 @@ package session
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"log"
@@ -79,6 +80,8 @@ func (rp *Reply) TransmitErr(err error) error {
 type command string
 
 // String return a command as string
+// command itu string, terus kenapa return string?
+// WTF?
 func (c command) String() string {
 	return string(c)
 }
@@ -346,6 +349,8 @@ func (s *Session) Valid(c command) (bool, error) {
 			return false, badSeqErr
 		}
 
+		// TODO: validate recipients MUST greater than 0
+
 		_, err := c.ValidData()
 		if err != nil {
 			return false, err
@@ -464,7 +469,27 @@ func (s *Session) Serve() {
 			if err != nil {
 				return
 			}
+
+			var messageData bytes.Buffer
 			// receive message data here
+			for {
+				// we SHOULD receive data in form of bytes
+				msgDataLine, err := s.Reader.ReadSlice('\n')
+				if err != nil {
+					// TODO: Handle error here
+					log.Println(err)
+				}
+				// break if
+				if bytes.Equal(msgDataLine, []byte(".\r\n")) {
+					break
+				}
+				// append each line into message content
+				_, err = messageData.Write(msgDataLine)
+				if err != nil {
+					log.Printf("%v\n", err)
+				}
+				log.Printf("%q", messageData)
+			}
 		case "\r\n":
 			log.Println("enter")
 		case "RSET":
